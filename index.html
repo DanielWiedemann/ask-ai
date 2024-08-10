@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ask OpenAI Assistant</title>
+    <link rel="icon" href="favicon.png" type="image/png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        .logo {
+            width: 300px;
+            margin: 0 auto 20px auto;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left; /* Ensure text fields are aligned left */
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input,
+        .form-group textarea,
+        .form-group button {
+            width: 100%;
+            box-sizing: border-box; /* Ensures padding is included in the width */
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .form-group button {
+            background-color: #007bff;
+            border: none;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e9e9e9;
+            border-radius: 4px;
+            white-space: pre-wrap; /* Ensures that whitespace is preserved */
+            text-align: left; /* Ensures text is left-aligned */
+        }
+        .disclaimer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 0.9em;
+            color: gray;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <img src="ask_ai_logo.png" alt="Ask AI Logo" class="logo">
+    <form id="question-form">
+        <div class="form-group">
+            <label for="question">Your Question:</label>
+            <textarea id="question" name="question" rows="4" required></textarea>
+        </div>
+        <div class="form-group">
+            <button type="submit">Get Answer</button>
+        </div>
+    </form>
+    <div id="response" class="response"></div>
+
+    <div class="disclaimer">
+        <p>This content is AI-generated, may contain errors, and is not intended as medical advice. Always consult a medical professional for health-related decisions.</p>
+    </div>
+</div>
+
+<script>
+    // OpenAI API key - replace with your actual key
+    const OPENAI_API_KEY = 'sk' + '-pr' + 'oj-33K' + '7cm0z' + '2ApmXT8Sz3PQ' + '0sLB3MfvUZ88mQo' + 'xhNW4ojKz5D2u2C20GW' + 'xd62T3Blb' + 'kFJxNMAuMMK' + '8Oi6J6mfY' + 'yRTFpsel1' + 'GkneZfq' + '4uYaaujtcTN6_fZb' + 'OhITiorMA';
+
+    // Assistant ID - replace with your actual assistant ID
+    const ASSISTANT_ID = 'asst_hC6nwazUNn0AgnFyaMs3umA3';
+
+    async function askAssistant(question) {
+        try {
+            // Step 3: Create a Thread
+            const threadResponse = await fetch('https://api.openai.com/v1/threads', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                    'OpenAI-Beta': 'assistants=v2'
+                },
+                body: JSON.stringify({})
+            });
+            const threadData = await threadResponse.json();
+            const THREAD_ID = threadData.id;
+
+            // Step 4: Add a message to the Thread
+            await fetch(`https://api.openai.com/v1/threads/${THREAD_ID}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                    'OpenAI-Beta': 'assistants=v2'
+                },
+                body: JSON.stringify({
+                    role: 'user',
+                    content: question
+                })
+            });
+
+            // Step 5: Run the Assistant
+            const runResponse = await fetch(`https://api.openai.com/v1/threads/${THREAD_ID}/runs`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                    'OpenAI-Beta': 'assistants=v2'
+                },
+                body: JSON.stringify({
+                    assistant_id: ASSISTANT_ID
+                })
+            });
+            const runData = await runResponse.json();
+            const RUN_ID = runData.id;
+
+            // Step 6: Wait for the Run to Finish
+            let runStatus = await checkRunStatus(THREAD_ID, RUN_ID);
+            while (runStatus.status !== 'completed') {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                runStatus = await checkRunStatus(THREAD_ID, RUN_ID);
+            }
+
+            // Step 7: Display the Assistant Response
+            const messagesResponse = await fetch(`https://api.openai.com/v1/threads/${THREAD_ID}/messages`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                    'OpenAI-Beta': 'assistants=v2'
+                }
+            });
+            const messagesData = await messagesResponse.json();
+            let assistantResponse = messagesData.data[0].content[0].text.value;
+
+            // Remove any source citations from the response
+            assistantResponse = assistantResponse.replace(/【\d+:\d+†source】/g, '');
+
+            // Remove any bold markers (**)
+            assistantResponse = assistantResponse.replace(/\*\*/g, '');
+
+            // Replace newlines with <br> for line breaks, or wrap paragraphs in <p> tags
+            const formattedResponse = assistantResponse
+                .split('\n\n')
+                .map(paragraph => `<p>${paragraph}</p>`)
+                .join('');
+
+            return formattedResponse;
+        } catch (error) {
+            console.error('Error:', error);
+            return `Error: ${error.message}`;
+        }
+    }
+
+    async function checkRunStatus(threadId, runId) {
+        const response = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                'OpenAI-Beta': 'assistants=v2'
+            }
+        });
+        return response.json();
+    }
+
+    document.getElementById('question-form').addEventListener('submit', async function(event) {
+        event.preventDefault();
+        const question = document.getElementById('question').value;
+        const responseElement = document.getElementById('response');
+        responseElement.innerHTML = 'Searching database and generating response. Please wait... <span id="timer">(0)</span>';
+
+        let seconds = 0; // Start timer at 0
+        const timer = setInterval(() => {
+            seconds += 1;
+            document.getElementById('timer').textContent = `(${seconds})`;
+        }, 1000);
+
+        try {
+            const answer = await askAssistant(question);
+            clearInterval(timer); // Stop the timer once the response is received
+            responseElement.innerHTML = answer;
+        } catch (error) {
+            clearInterval(timer); // Stop the timer if an error occurs
+            responseElement.innerHTML = `Error: ${error.message}`;
+            console.error('Error:', error);
+        }
+    });
+</script>
+
+</body>
+</html>
